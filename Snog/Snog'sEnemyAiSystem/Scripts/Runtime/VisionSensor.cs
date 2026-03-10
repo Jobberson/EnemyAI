@@ -48,6 +48,13 @@ namespace SnogTools.AI
 
         public Transform CurrentTarget { get; private set; }
         public float CurrentDetection { get; private set; }
+        
+        [Header("Gizmos / Debug")]
+        [Tooltip("Draw the FOV cone in the Scene view when selected.")]
+        public bool gizmoShowFOV = true;
+
+        [Tooltip("Draw a short forward ray from the eye position when selected.")]
+        public bool gizmoShowEyeRay = true;
 
         private float _nextScanTime;
         private Vector3 EyePosition => transform.position + Vector3.up * eyeHeight;
@@ -168,18 +175,30 @@ namespace SnogTools.AI
 #if UNITY_EDITOR
         private void OnDrawGizmosSelected()
         {
-            // FOV arc
-            UnityEditor.Handles.color = new Color(1f, 1f, 0f, 0.25f);
-            UnityEditor.Handles.DrawSolidArc(
-                EyePosition,
-                Vector3.up,
-                Quaternion.Euler(0, -fieldOfView * 0.5f, 0) * transform.forward,
-                fieldOfView,
-                viewDistance
-            );
+            if (gizmoShowFOV)
+            {
+                UnityEditor.Handles.color = new Color(1f, 1f, 0f, 0.25f);
+                UnityEditor.Handles.DrawSolidArc(
+                    EyePosition,
+                    Vector3.up,
+                    Quaternion.Euler(0, -fieldOfView * 0.5f, 0) * transform.forward,
+                    fieldOfView,
+                    viewDistance
+                );
+            }
 
-            Gizmos.color = Color.yellow;
-            Gizmos.DrawLine(EyePosition, EyePosition + transform.forward * Mathf.Min(0.5f * viewDistance, 2f));
+            if (gizmoShowEyeRay)
+            {
+                Gizmos.color = Color.yellow;
+                Gizmos.DrawLine(EyePosition, EyePosition + transform.forward * Mathf.Min(0.5f * viewDistance, 2f));
+            }
+
+            // Optional: when running, show a line to current target if any
+            if (Application.isPlaying && CurrentTarget != null)
+            {
+                Gizmos.color = new Color(1f, 0.6f, 0.2f, 0.95f);
+                Gizmos.DrawLine(EyePosition, CurrentTarget.position);
+            }
         }
 #endif
     }

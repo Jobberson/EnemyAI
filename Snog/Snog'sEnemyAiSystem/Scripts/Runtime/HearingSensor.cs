@@ -25,6 +25,10 @@ namespace SnogTools.AI
 
         public event Action<SoundEvent> OnHeardSound;
 
+        [Header("Gizmos / Debug")]
+        [Tooltip("Draw the base hearing radius disc in the Scene view when selected.")]
+        public bool gizmoShowHearingRadius = true;
+
         private int _processedThisFrame;
 
         private void OnEnable()
@@ -73,5 +77,23 @@ namespace SnogTools.AI
                 OnHeardSound?.Invoke(evt);
             }
         }
+
+#if UNITY_EDITOR
+        private void OnDrawGizmosSelected()
+        {
+            if (!gizmoShowHearingRadius)
+                return;
+
+            // Use baseHearingRadius as the reference disc; loudness-scaled radius varies at runtime
+            float r = Mathf.Max(0.01f, baseHearingRadius);
+            var pos = transform.position;
+
+            UnityEditor.Handles.color = new Color(0.2f, 0.8f, 1f, 0.15f);
+            UnityEditor.Handles.DrawSolidDisc(pos, Vector3.up, r);
+
+            UnityEditor.Handles.color = new Color(0.2f, 0.8f, 1f, 0.9f);
+            UnityEditor.Handles.DrawWireDisc(pos, Vector3.up, r);
+        }
+#endif
     }
 }
