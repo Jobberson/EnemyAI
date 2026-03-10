@@ -7,14 +7,18 @@ namespace SnogTools.AI.Editor
     [CustomEditor(typeof(EnemyAIController))]
     public class EnemyAIControllerEditor : UnityEditor.Editor
     {
-        // Foldout states (persisted via EditorPrefs keys)
         private bool _foldRefs;
         private bool _foldPatrol;
         private bool _foldInvestigate;
         private bool _foldChase;
+        private bool _foldPredSusp;
+        private bool _foldHide;
         private bool _foldGizmos;
 
-        // Property cache
+        private const string KEY_PREFIX = "SnogTools.AI.EnemyAIController.";
+        private EnemyAIController _c;
+
+        // Cached props (existing)
         private SerializedProperty propVision;
         private SerializedProperty propHearing;
         private SerializedProperty propMemory;
@@ -23,10 +27,8 @@ namespace SnogTools.AI.Editor
         private SerializedProperty propWaypointTolerance;
         private SerializedProperty propWaitAtDestination;
 
-        // Waypoints
         private SerializedProperty propPatrolPoints;
 
-        // Random patrol
         private SerializedProperty propRandomCenterMode;
         private SerializedProperty propRandomCenterTransform;
         private SerializedProperty propRandomCenterPoint;
@@ -36,29 +38,41 @@ namespace SnogTools.AI.Editor
         private SerializedProperty propRandomMaxAttempts;
         private SerializedProperty propGroundRaycastDepth;
         private SerializedProperty propGroundLayer;
+        private SerializedProperty propAvoidPlayerLoS;
 
-        // Investigate/Search
         private SerializedProperty propInvestigateDuration;
         private SerializedProperty propSearchRadius;
         private SerializedProperty propSearchDuration;
 
-        // Chase
         private SerializedProperty propRepathInterval;
         private SerializedProperty propGiveUpAfterSeconds;
+
+        // New: Prediction / Suspicion
+        private SerializedProperty propPredScaleDist;
+        private SerializedProperty propPredMaxScale;
+        private SerializedProperty propSuspQueryDist;
+        private SerializedProperty propSuspThreshold;
+
+        // New: Hide From Player
+        private SerializedProperty propHideFromPlayer;
+        private SerializedProperty propHideBehavior;
+        private SerializedProperty propPlayerEye;
+        private SerializedProperty propPlayerFOV;
+        private SerializedProperty propWatchedDist;
+        private SerializedProperty propHideRepathCooldown;
+        private SerializedProperty propHideAttempts;
+        private SerializedProperty propHideRadius;
+        private SerializedProperty propPlayerOccluderMask;
 
         // Gizmos
         private SerializedProperty propGizmoShowRandomArea;
         private SerializedProperty propGizmoShowRandomLast;
         private SerializedProperty propGizmoShowWaypoints;
 
-        private const string KEY_PREFIX = "SnogTools.AI.EnemyAIController.";
-        private EnemyAIController _controller;
-
         private void OnEnable()
         {
-            _controller = (EnemyAIController)target;
+            _c = (EnemyAIController)target;
 
-            // Cache properties
             propVision = serializedObject.FindProperty("vision");
             propHearing = serializedObject.FindProperty("hearing");
             propMemory = serializedObject.FindProperty("memory");
@@ -78,6 +92,7 @@ namespace SnogTools.AI.Editor
             propRandomMaxAttempts = serializedObject.FindProperty("randomMaxAttempts");
             propGroundRaycastDepth = serializedObject.FindProperty("groundRaycastDepth");
             propGroundLayer = serializedObject.FindProperty("groundLayer");
+            propAvoidPlayerLoS = serializedObject.FindProperty("avoidPlayerLoSInRandomPatrol");
 
             propInvestigateDuration = serializedObject.FindProperty("investigateDuration");
             propSearchRadius = serializedObject.FindProperty("searchRadius");
@@ -86,34 +101,54 @@ namespace SnogTools.AI.Editor
             propRepathInterval = serializedObject.FindProperty("repathInterval");
             propGiveUpAfterSeconds = serializedObject.FindProperty("giveUpAfterSeconds");
 
+            // Prediction / Suspicion
+            propPredScaleDist = serializedObject.FindProperty("predictionScaleDistance");
+            propPredMaxScale = serializedObject.FindProperty("maxPredictionLeadScale");
+            propSuspQueryDist = serializedObject.FindProperty("suspicionQueryDistance");
+            propSuspThreshold = serializedObject.FindProperty("suspicionThreshold");
+
+            // Hide From Player
+            propHideFromPlayer = serializedObject.FindProperty("hideFromPlayer");
+            propHideBehavior = serializedObject.FindProperty("hideBehavior");
+            propPlayerEye = serializedObject.FindProperty("playerEye");
+            propPlayerFOV = serializedObject.FindProperty("playerFOV");
+            propWatchedDist = serializedObject.FindProperty("watchedDistance");
+            propHideRepathCooldown = serializedObject.FindProperty("hideRepathCooldown");
+            propHideAttempts = serializedObject.FindProperty("hideSampleAttempts");
+            propHideRadius = serializedObject.FindProperty("hideSearchRadius");
+            propPlayerOccluderMask = serializedObject.FindProperty("playerOccluderMask");
+
+            // Gizmos
             propGizmoShowRandomArea = serializedObject.FindProperty("gizmoShowRandomPatrolArea");
             propGizmoShowRandomLast = serializedObject.FindProperty("gizmoShowRandomLastPoint");
             propGizmoShowWaypoints = serializedObject.FindProperty("gizmoShowWaypoints");
 
-            // Load foldout prefs
             _foldRefs = EditorPrefs.GetBool(KEY_PREFIX + "foldRefs", true);
             _foldPatrol = EditorPrefs.GetBool(KEY_PREFIX + "foldPatrol", true);
             _foldInvestigate = EditorPrefs.GetBool(KEY_PREFIX + "foldInvestigate", true);
             _foldChase = EditorPrefs.GetBool(KEY_PREFIX + "foldChase", true);
+            _foldPredSusp = EditorPrefs.GetBool(KEY_PREFIX + "foldPredSusp", true);
+            _foldHide = EditorPrefs.GetBool(KEY_PREFIX + "foldHide", true);
             _foldGizmos = EditorPrefs.GetBool(KEY_PREFIX + "foldGizmos", true);
         }
 
         private void OnDisable()
         {
-            // Save foldout prefs
             EditorPrefs.SetBool(KEY_PREFIX + "foldRefs", _foldRefs);
             EditorPrefs.SetBool(KEY_PREFIX + "foldPatrol", _foldPatrol);
             EditorPrefs.SetBool(KEY_PREFIX + "foldInvestigate", _foldInvestigate);
             EditorPrefs.SetBool(KEY_PREFIX + "foldChase", _foldChase);
+            EditorPrefs.SetBool(KEY_PREFIX + "foldPredSusp", _foldPredSusp);
+            EditorPrefs.SetBool(KEY_PREFIX + "foldHide", _foldHide);
             EditorPrefs.SetBool(KEY_PREFIX + "foldGizmos", _foldGizmos);
         }
 
         public override void OnInspectorGUI()
         {
             serializedObject.Update();
-
             DrawHeader();
 
+            // References
             _foldRefs = EditorGUILayout.BeginFoldoutHeaderGroup(_foldRefs, "References");
             if (_foldRefs)
             {
@@ -125,20 +160,18 @@ namespace SnogTools.AI.Editor
             }
             EditorGUILayout.EndFoldoutHeaderGroup();
 
-            EditorGUILayout.Space(3f);
+            EditorGUILayout.Space(4f);
 
+            // Patrol
             _foldPatrol = EditorGUILayout.BeginFoldoutHeaderGroup(_foldPatrol, "State: Patrol");
             if (_foldPatrol)
             {
                 EditorGUI.indentLevel++;
-
                 EditorGUILayout.PropertyField(propPatrolMode);
-
-                // Shared patrol settings
                 EditorGUILayout.PropertyField(propWaypointTolerance, new GUIContent("Arrival Tolerance"));
                 EditorGUILayout.PropertyField(propWaitAtDestination, new GUIContent("Wait At Destination"));
 
-                EditorGUILayout.Space(4f);
+                EditorGUILayout.Space(3f);
                 using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
                 {
                     var mode = (PatrolMode)propPatrolMode.enumValueIndex;
@@ -171,15 +204,13 @@ namespace SnogTools.AI.Editor
                             EditorGUILayout.PropertyField(propRandomCenterPoint);
                             if (GUILayout.Button("Use Current Position As Static Point"))
                             {
-                                propRandomCenterPoint.vector3Value = _controller.transform.position;
+                                propRandomCenterPoint.vector3Value = _c.transform.position;
                             }
                         }
 
                         EditorGUILayout.PropertyField(propRandomRadius, new GUIContent("Radius"));
                         EditorGUILayout.Slider(propRandomWaitMin, 0f, 10f, new GUIContent("Wait Min"));
                         EditorGUILayout.Slider(propRandomWaitMax, 0f, 10f, new GUIContent("Wait Max"));
-
-                        // ensure min <= max visually
                         if (propRandomWaitMax.floatValue < propRandomWaitMin.floatValue)
                         {
                             propRandomWaitMax.floatValue = propRandomWaitMin.floatValue;
@@ -189,51 +220,8 @@ namespace SnogTools.AI.Editor
                         EditorGUILayout.PropertyField(propGroundRaycastDepth, new GUIContent("Ground Raycast Depth"));
                         EditorGUILayout.PropertyField(propGroundLayer, new GUIContent("Ground Layer"));
 
+                        EditorGUILayout.PropertyField(propAvoidPlayerLoS, new GUIContent("Avoid Player LoS (Random Patrol)"));
                         EditorGUI.indentLevel--;
-                    }
-                }
-
-                // Runtime helper buttons (safe in edit mode)
-                EditorGUILayout.Space(4f);
-                using (new EditorGUILayout.HorizontalScope())
-                {
-                    if (GUILayout.Button("Go Idle"))
-                    {
-                        foreach (var t in targets)
-                        {
-                            var c = t as EnemyAIController;
-                            c?.Abort();
-                        }
-                    }
-
-                    if (GUILayout.Button("Force Patrol"))
-                    {
-                        foreach (var t in targets)
-                        {
-                            var c = t as EnemyAIController;
-                            if (c == null) continue;
-
-                            // Re-enter patrol state to trigger immediate destination selection
-                            var so = new SerializedObject(c);
-                            var modeProp = so.FindProperty("patrolMode");
-                            var pointsProp = so.FindProperty("patrolPoints");
-
-                            bool canPatrol =
-                                ((PatrolMode)modeProp.enumValueIndex == PatrolMode.Waypoints && pointsProp != null && pointsProp.arraySize > 0)
-                                || ((PatrolMode)modeProp.enumValueIndex == PatrolMode.Random);
-
-                            if (canPatrol)
-                            {
-                                // simulate SetState to Patrol via runtime
-                                // Note: We do not expose SetState publicly; entering by toggling fields is sufficient in playmode.
-                                if (Application.isPlaying)
-                                {
-                                    // Nudge the agent by reassigning the same mode to trigger UpdatePatrol flow
-                                    c.enabled = false;
-                                    c.enabled = true;
-                                }
-                            }
-                        }
                     }
                 }
 
@@ -241,8 +229,9 @@ namespace SnogTools.AI.Editor
             }
             EditorGUILayout.EndFoldoutHeaderGroup();
 
-            EditorGUILayout.Space(3f);
+            EditorGUILayout.Space(4f);
 
+            // Investigate / Search
             _foldInvestigate = EditorGUILayout.BeginFoldoutHeaderGroup(_foldInvestigate, "State: Investigate / Search");
             if (_foldInvestigate)
             {
@@ -254,8 +243,9 @@ namespace SnogTools.AI.Editor
             }
             EditorGUILayout.EndFoldoutHeaderGroup();
 
-            EditorGUILayout.Space(3f);
+            EditorGUILayout.Space(4f);
 
+            // Chase
             _foldChase = EditorGUILayout.BeginFoldoutHeaderGroup(_foldChase, "State: Chase");
             if (_foldChase)
             {
@@ -266,45 +256,68 @@ namespace SnogTools.AI.Editor
             }
             EditorGUILayout.EndFoldoutHeaderGroup();
 
-            EditorGUILayout.Space(3f);
+            EditorGUILayout.Space(4f);
 
+            // Prediction / Suspicion
+            _foldPredSusp = EditorGUILayout.BeginFoldoutHeaderGroup(_foldPredSusp, "Prediction / Suspicion");
+            if (_foldPredSusp)
+            {
+                EditorGUI.indentLevel++;
+                EditorGUILayout.PropertyField(propPredScaleDist, new GUIContent("Prediction Scale Distance"));
+                EditorGUILayout.PropertyField(propPredMaxScale, new GUIContent("Max Prediction Lead Scale"));
+                EditorGUILayout.PropertyField(propSuspQueryDist, new GUIContent("Suspicion Query Distance"));
+                EditorGUILayout.PropertyField(propSuspThreshold, new GUIContent("Suspicion Threshold"));
+                EditorGUI.indentLevel--;
+            }
+            EditorGUILayout.EndFoldoutHeaderGroup();
+
+            EditorGUILayout.Space(4f);
+
+            // Hide From Player
+            _foldHide = EditorGUILayout.BeginFoldoutHeaderGroup(_foldHide, "Hide From Player (Bracken-like)");
+            if (_foldHide)
+            {
+                EditorGUI.indentLevel++;
+                EditorGUILayout.PropertyField(propHideFromPlayer, new GUIContent("Enable"));
+                EditorGUILayout.PropertyField(propHideBehavior, new GUIContent("Behavior"));
+
+                // Info: We use Camera.main automatically
+                EditorGUILayout.HelpBox("Uses Camera.main as the player's eye. You can assign Player Eye to override if needed.", MessageType.None);
+                EditorGUILayout.PropertyField(propPlayerEye, new GUIContent("Player Eye (optional override)"));
+
+                EditorGUILayout.PropertyField(propPlayerFOV, new GUIContent("Player FOV (°)"));
+                EditorGUILayout.PropertyField(propWatchedDist, new GUIContent("Watched Distance"));
+                EditorGUILayout.PropertyField(propHideRepathCooldown, new GUIContent("Repath Cooldown (s)"));
+                EditorGUILayout.PropertyField(propHideAttempts, new GUIContent("Hide Sample Attempts"));
+                EditorGUILayout.PropertyField(propHideRadius, new GUIContent("Hide Search Radius"));
+                EditorGUILayout.PropertyField(propPlayerOccluderMask, new GUIContent("Player Occluder Mask"));
+
+                EditorGUI.indentLevel--;
+            }
+            EditorGUILayout.EndFoldoutHeaderGroup();
+
+            EditorGUILayout.Space(4f);
+
+            // Gizmos
             _foldGizmos = EditorGUILayout.BeginFoldoutHeaderGroup(_foldGizmos, "Gizmos / Debug");
             if (_foldGizmos)
             {
                 EditorGUI.indentLevel++;
-                using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+                var mode = (PatrolMode)propPatrolMode.enumValueIndex;
+                if (mode == PatrolMode.Random)
                 {
-                    var mode = (PatrolMode)propPatrolMode.enumValueIndex;
-
-                    if (mode == PatrolMode.Random)
-                    {
-                        EditorGUILayout.PropertyField(propGizmoShowRandomArea, new GUIContent("Show Random Patrol Area"));
-                        EditorGUILayout.PropertyField(propGizmoShowRandomLast, new GUIContent("Show Last Random Point"));
-                    }
-                    else if (mode == PatrolMode.Waypoints)
-                    {
-                        EditorGUILayout.PropertyField(propGizmoShowWaypoints, new GUIContent("Show Waypoints"));
-                    }
-
-                    // Info & scene refresh
-                    if (GUILayout.Button("Refresh Scene Gizmos"))
-                    {
-                        SceneView.RepaintAll();
-                    }
+                    EditorGUILayout.PropertyField(propGizmoShowRandomArea, new GUIContent("Show Random Patrol Area"));
+                    EditorGUILayout.PropertyField(propGizmoShowRandomLast, new GUIContent("Show Last Random Point"));
+                }
+                else
+                {
+                    EditorGUILayout.PropertyField(propGizmoShowWaypoints, new GUIContent("Show Waypoints"));
                 }
 
-                // Runtime quick info
-                if (Application.isPlaying && _controller != null)
+                if (GUILayout.Button("Refresh Scene Gizmos"))
                 {
-                    EditorGUILayout.Space(3f);
-                    using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
-                    {
-                        EditorGUILayout.LabelField("Runtime", EditorStyles.boldLabel);
-                        EditorGUILayout.LabelField("State", _controller.name);
-                        // Could show more runtime info if you expose it, e.g., current target, memory, etc.
-                    }
+                    SceneView.RepaintAll();
                 }
-
                 EditorGUI.indentLevel--;
             }
             EditorGUILayout.EndFoldoutHeaderGroup();
@@ -327,13 +340,7 @@ namespace SnogTools.AI.Editor
 
                 if (GUILayout.Button("Docs", GUILayout.Width(56)))
                 {
-                    Application.OpenURL("https://example.com"); // Replace with your docs URL
-                }
-
-                if (GUILayout.Button("Samples", GUILayout.Width(70)))
-                {
-                    // Optional: ping sample folder
-                    // EditorUtility.DisplayDialog("Samples", "Open Samples~/BasicDemo/", "OK");
+                    Application.OpenURL("https://your-docs-url-here");
                 }
             }
 
